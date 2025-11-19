@@ -38,7 +38,44 @@ def store_outputs(iteration, Ex, Ey, Ez, Hx, Hy, Hz, G):
             # Store electric or magnetic field components
             if 'I' not in output:
                 field = locals()[output]
-                rx.outputs[output][iteration] = field[rx.xcoord, rx.ycoord, rx.zcoord]
+
+                # helper to safely get a value with bounds check
+                def _get(i, j, k):
+                    if 0 <= i < field.shape[0] and 0 <= j < field.shape[1] and 0 <= k < field.shape[2]:
+                        return field[i, j, k]
+                    return None
+
+                i0 = rx.xcoord
+                j0 = rx.ycoord
+                k0 = rx.zcoord
+
+                # compute per-component averages depending on which output is requested
+                if output == 'Ex':
+                    coords = [(0, 0, 0), (-1, 0, 0), (0, 0, 1), (-1, 0, 1)]
+                elif output == 'Ey':
+                    coords = [(0, 0, 0), (0, -1, 0), (0, 0, 1), (0, -1, 1)]
+                elif output == 'Ez':
+                    coords = [(0, 0, 0)]
+                elif output == 'Hx':
+                    coords = [(0, 0, 0), (0, -1, 0)]
+                elif output == 'Hy':
+                    coords = [(0, 0, 0), (-1, 0, 0)]
+                elif output == 'Hz':
+                    coords = [(0, 0, 0), (-1, 0, 0), (0, -1, 0), (-1, -1, 0),
+                              (0, 0, 1), (-1, 0, 1), (0, -1, 1), (-1, -1, 1)]
+                else:
+                    coords = [(0, 0, 0)]
+
+                s = 0.0
+                cnt = 0
+                for dx, dy, dz in coords:
+                    val = _get(i0 + dx, j0 + dy, k0 + dz)
+                    if val is not None:
+                        s += val
+                        cnt += 1
+
+                rx.outputs[output][iteration] = s / cnt if cnt > 0 else 0.0
+
             # Store current component
             else:
                 func = globals()[output]

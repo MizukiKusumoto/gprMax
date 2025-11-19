@@ -57,16 +57,16 @@ def hertzian_dipole_fs(iterations, dt, dxdydz, rx):
         sign_z = np.sign(z)
 
     # Coordinates of Rx for Ex FDTD component
-    Ex_x = x + 0.5 * dx
+    Ex_x = x
     Ex_y = y
-    Ex_z = z - 0.5 * dz
+    Ex_z = z
     Er_x = np.sqrt((Ex_x**2 + Ex_y**2 + Ex_z**2))
     tau_Ex = Er_x / c
 
     # Coordinates of Rx for Ey FDTD component
     Ey_x = x
-    Ey_y = y + 0.5 * dy
-    Ey_z = z - 0.5 * dz
+    Ey_y = y
+    Ey_z = z
     Er_y = np.sqrt((Ey_x**2 + Ey_y**2 + Ey_z**2))
     tau_Ey = Er_y / c
 
@@ -79,22 +79,22 @@ def hertzian_dipole_fs(iterations, dt, dxdydz, rx):
 
     # Coordinates of Rx for Hx FDTD component
     Hx_x = x
-    Hx_y = y + 0.5 * dy
+    Hx_y = y
     Hx_z = z
     Hr_x = np.sqrt((Hx_x**2 + Hx_y**2 + Hx_z**2))
     tau_Hx = Hr_x / c
 
     # Coordinates of Rx for Hy FDTD component
-    Hy_x = x + 0.5 * dx
+    Hy_x = x
     Hy_y = y
     Hy_z = z
     Hr_y = np.sqrt((Hy_x**2 + Hy_y**2 + Hy_z**2))
     tau_Hy = Hr_y / c
 
     # Coordinates of Rx for Hz FDTD component
-    Hz_x = x + 0.5 * dx
-    Hz_y = y + 0.5 * dy
-    Hz_z = z - 0.5 * dz
+    Hz_x = x
+    Hz_y = y
+    Hz_z = z
     Hr_z = np.sqrt((Hz_x**2 + Hz_y**2 + Hz_z**2))
     tau_Hz = Hr_z / c
 

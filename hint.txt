@@ -1,0 +1,22 @@
+仮想環境立ち上げ
+conda activate gprMax
+
+実行
+python -m gprMax test.in
+
+可視化
+python -m tools.plot_Ascan test.out
+
+csv化
+python convert.py
+
+解析解計算
+python analytical_solution.py
+
+仮想環境終了
+conda deactivate
+
+dtの設定
+dt <= 1 / (c* (dx^(-2)+dy^(-2)+dz^(-2))^0.5)
+
+batch.shのbase_sizeと、test.masterを編集する

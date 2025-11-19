@@ -189,13 +189,11 @@ def process_multicmds(multicmds, G):
             h = HertzianDipole()
             h.polarisation = polarisation
 
-            # Set length of dipole to grid size in polarisation direction
-            if h.polarisation == 'x':
-                h.dl = G.dx
-            elif h.polarisation == 'y':
-                h.dl = G.dy
-            elif h.polarisation == 'z':
-                h.dl = G.dz
+            # Force length of dipole to fixed value (meters).
+            # NOTE: previously this was set to the grid cell size in the
+            # polarisation direction (G.dx/G.dy/G.dz). We fix it here to
+            # 0.001 m as requested.
+            h.dl = 0.001
 
             h.xcoord = xcoord
             h.ycoord = ycoord
