@@ -1,6 +1,6 @@
 #!/bin/bash -l
 
-#SBATCH --array=7-7%1
+#SBATCH --array=1,2%1
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --partition=all
@@ -22,7 +22,7 @@ DX=$(awk -v t="$SLURM_ARRAY_TASK_ID" -v base="$base_size" 'BEGIN{printf "%.8e", 
 
 # Replace the dx_dy_dz line (commented or not) and write to task-specific file
 sed -E "s|^([[:space:]]*#?[[:space:]]*dx_dy_dz[[:space:]]*:\s*).*|\1 ${DX} ${DX} ${DX}|I" test.master > test.in
-    
+
 echo "Running gprMax with input: test.in (dx set to ${DX})"
 # python -m gprMax test.in -gpu
 python -m gprMax test.in
