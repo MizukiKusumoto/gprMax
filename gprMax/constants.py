@@ -33,18 +33,18 @@ z0 = np.sqrt(m0 / e0)
 
 # Single precision
 # For numpy arrays
-floattype = np.float32
-complextype = np.complex64
+# floattype = np.float32
+# complextype = np.complex64
 
 # For C (CUDA) arrays
-cudafloattype = 'float'
-cudacomplextype = 'pycuda::complex<float>'
+# cudafloattype = 'float'
+# cudacomplextype = 'pycuda::complex<float>'
 
 # Double precision
 # For numpy arrays
-# floattype = np.float64
-# complextype = np.complex128
+floattype = np.float64
+complextype = np.complex128
 
 # For C (CUDA) arrays
-# cudafloattype = 'double'
-# cudacomplextype = 'pycuda::complex<double>'
+cudafloattype = 'double'
+cudacomplextype = 'pycuda::complex<double>'
