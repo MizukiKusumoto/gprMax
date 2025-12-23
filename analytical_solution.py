@@ -8,7 +8,7 @@ import math
 output_csv = "ana.csv"
 duration = 9.0e-9  # 時間ウィンドウ（秒）
 domain_size = 3.0  # 計算領域のサイズ（メートル）
-domain_num = 300  # グリッド数
+domain_num = 360  # グリッド数
 rx = (0.8, 0.8, 0.8)  # 受信点の相対座標（x->y,y->z,z->x）
 
 # 物理定数（C++と同じ値）

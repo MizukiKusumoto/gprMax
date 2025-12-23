@@ -1,9 +1,0 @@
-#title: Hertzian dipole in free-space
-#domain: 2.0 2.0 2.0
-#dx_dy_dz:  1.42857143e-03 1.42857143e-03 1.42857143e-03
-#time_window: 9e-9
-#time_step_stability_factor: 1.0
-
-#waveform: gaussiandot 1 1e9 myWave
-#hertzian_dipole: z 0.600 0.600 1.000 myWave
-#rx: 1.400 1.400 1.000

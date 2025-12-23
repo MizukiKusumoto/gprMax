@@ -27,3 +27,4 @@ dist/
 *.csv
 
 log/
+test.in
