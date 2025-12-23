@@ -25,3 +25,5 @@ dist/
 *.err
 *.png
 *.csv
+
+log/
