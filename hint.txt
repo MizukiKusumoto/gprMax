@@ -1,3 +1,11 @@
+セットアップ
+conda env create -f conda_env.yml
+conda activate gprMax
+export CFLAGS="-std=c99"
+python setup.py build
+python setup.py install
+conda install numpy pandas
+
 仮想環境立ち上げ
 conda activate gprMax
 

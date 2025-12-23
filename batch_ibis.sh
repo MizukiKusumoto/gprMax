@@ -33,7 +33,7 @@ echo "(`date`) Starting job on node: $(hostname)"
 ###########################
 ### Execute program
 ###########################
-base_size="0.01"
+base_size="0.008333333333333"
 
 for i in {1..8}; do
     echo "=========================================="

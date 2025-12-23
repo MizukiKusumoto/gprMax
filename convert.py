@@ -40,8 +40,8 @@ def gprmax_to_csv(output_file, csv_file, n, rx_number=1):
 
     # CSVに保存
     df = df[0 :: n * 2]
-    df.to_csv(csv_file + f"_0_{n}.csv", index=False)
-    print(f"データを {csv_file}_0_{n}.csv に保存しました")
+    df.to_csv(csv_file + f"_{n}.csv", index=False)
+    print(f"データを {csv_file}_{n}.csv に保存しました")
     print(f"時間ステップ: {dt:.3e} s")
     print(f"データ点数: {n_steps}")
 
