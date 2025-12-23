@@ -23,6 +23,12 @@ import h5py
 from gprMax._version import __version__
 from gprMax.grid import Ix, Iy, Iz
 
+# Field component mapping for efficient lookups
+_FIELD_MAP = {"Ex": 0, "Ey": 1, "Ez": 2, "Hx": 3, "Hy": 4, "Hz": 5}
+
+# Current function mapping
+_CURRENT_FUNC_MAP = {"Ix": Ix, "Iy": Iy, "Iz": Iz}
+
 
 def store_outputs(iteration, Ex, Ey, Ez, Hx, Hy, Hz, G):
     """Stores field component values for every receiver and transmission line.
@@ -33,60 +39,82 @@ def store_outputs(iteration, Ex, Ey, Ez, Hx, Hy, Hz, G):
         G (class): Grid class instance - holds essential parameters describing the model.
     """
 
+    # Create field tuple once for efficient access
+    fields = (Ex, Ey, Ez, Hx, Hy, Hz)
+
     for rx in G.rxs:
+        i = rx.xcoord
+        j = rx.ycoord
+        k = rx.zcoord
         for output in rx.outputs:
             # Store electric or magnetic field components
-            if 'I' not in output:
-                field = locals()[output]
-
-                # helper to safely get a value with bounds check
-                def _get(i, j, k):
-                    if 0 <= i < field.shape[0] and 0 <= j < field.shape[1] and 0 <= k < field.shape[2]:
-                        return field[i, j, k]
-                    return None
-
-                i0 = rx.xcoord
-                j0 = rx.ycoord
-                k0 = rx.zcoord
-
-                # compute per-component averages depending on which output is requested
-                if output == 'Ex':
-                    coords = [(0, 0, 0), (-1, 0, 0), (0, 0, 1), (-1, 0, 1)]
-                elif output == 'Ey':
-                    coords = [(0, 0, 0), (0, -1, 0), (0, 0, 1), (0, -1, 1)]
-                elif output == 'Ez':
-                    coords = [(0, 0, 0)]
-                elif output == 'Hx':
-                    coords = [(0, 0, 0), (0, -1, 0)]
-                elif output == 'Hy':
-                    coords = [(0, 0, 0), (-1, 0, 0)]
-                elif output == 'Hz':
-                    coords = [(0, 0, 0), (-1, 0, 0), (0, -1, 0), (-1, -1, 0),
-                              (0, 0, 1), (-1, 0, 1), (0, -1, 1), (-1, -1, 1)]
+            if output in _FIELD_MAP:
+                field_idx = _FIELD_MAP[output]
+                # Average Ex, Ey to match Ez position (staggered grid correction)
+                # Ez[i,j,k] is at (i, j, k+0.5)
+                if output == "Ex":
+                    # Ex[i,j,k] is at (i+0.5, j, k), need to interpolate to (i, j, k+0.5)
+                    # x-direction: average Ex[i,j,k] and Ex[i-1,j,k] to get x=i
+                    # z-direction: average k and k+1 to get z=k+0.5
+                    rx.outputs[output][iteration] = 0.25 * (
+                        Ex[i, j, k]
+                        + Ex[i - 1, j, k]
+                        + Ex[i, j, k + 1]
+                        + Ex[i - 1, j, k + 1]
+                    )
+                elif output == "Ey":
+                    # Ey[i,j,k] is at (i, j+0.5, k), need to interpolate to (i, j, k+0.5)
+                    # y-direction: average Ey[i,j,k] and Ey[i,j-1,k] to get y=j
+                    # z-direction: average k and k+1 to get z=k+0.5
+                    rx.outputs[output][iteration] = 0.25 * (
+                        Ey[i, j, k]
+                        + Ey[i, j - 1, k]
+                        + Ey[i, j, k + 1]
+                        + Ey[i, j - 1, k + 1]
+                    )
+                elif output == "Hx":
+                    # Hx[i,j,k] is at (i, j+0.5, k+0.5), need to interpolate to (i, j, k+0.5)
+                    # y-direction: average Hx[i,j,k] and Hx[i,j-1,k] to get y=j
+                    rx.outputs[output][iteration] = 0.5 * (
+                        Hx[i, j, k] + Hx[i, j - 1, k]
+                    )
+                elif output == "Hy":
+                    # Hy[i,j,k] is at (i+0.5, j, k+0.5), need to interpolate to (i, j, k+0.5)
+                    # x-direction: average Hy[i,j,k] and Hy[i-1,j,k] to get x=i
+                    rx.outputs[output][iteration] = 0.5 * (
+                        Hy[i, j, k] + Hy[i - 1, j, k]
+                    )
+                elif output == "Hz":
+                    # Hz[i,j,k] is at (i+0.5, j+0.5, k), need to interpolate to (i, j, k+0.5)
+                    # x-direction: average (i, i-1) to get x=i
+                    # y-direction: average (j, j-1) to get y=j
+                    # z-direction: average (k, k+1) to get z=k+0.5
+                    rx.outputs[output][iteration] = 0.125 * (
+                        Hz[i, j, k]
+                        + Hz[i - 1, j, k]
+                        + Hz[i, j - 1, k]
+                        + Hz[i - 1, j - 1, k]
+                        + Hz[i, j, k + 1]
+                        + Hz[i - 1, j, k + 1]
+                        + Hz[i, j - 1, k + 1]
+                        + Hz[i - 1, j - 1, k + 1]
+                    )
                 else:
-                    coords = [(0, 0, 0)]
-
-                s = 0.0
-                cnt = 0
-                for dx, dy, dz in coords:
-                    val = _get(i0 + dx, j0 + dy, k0 + dz)
-                    if val is not None:
-                        s += val
-                        cnt += 1
-
-                rx.outputs[output][iteration] = s / cnt if cnt > 0 else 0.0
-
+                    rx.outputs[output][iteration] = fields[field_idx][i, j, k]
             # Store current component
+            elif output in _CURRENT_FUNC_MAP:
+                func = _CURRENT_FUNC_MAP[output]
+                rx.outputs[output][iteration] = func(i, j, k, Hx, Hy, Hz, G)
             else:
-                func = globals()[output]
-                rx.outputs[output][iteration] = func(rx.xcoord, rx.ycoord, rx.zcoord, Hx, Hy, Hz, G)
+                raise ValueError(f"Unknown output type: {output}")
 
     for tl in G.transmissionlines:
         tl.Vtotal[iteration] = tl.voltage[tl.antpos]
         tl.Itotal[iteration] = tl.current[tl.antpos]
 
 
-kernel_template_store_outputs = Template("""
+kernel_template_store_outputs = Template(
+    """
 
 // Macros for converting subscripts to linear index:
 #define INDEX2D_RXCOORDS(m, n) (m)*($NY_RXCOORDS)+(n)
@@ -115,16 +143,24 @@ __global__ void store_outputs(int NRX, int iteration, const int* __restrict__ rx
         i = rxcoords[INDEX2D_RXCOORDS(rx,0)];
         j = rxcoords[INDEX2D_RXCOORDS(rx,1)];
         k = rxcoords[INDEX2D_RXCOORDS(rx,2)];
-        rxs[INDEX3D_RXS(0,iteration,rx)] = Ex[INDEX3D_FIELDS(i,j,k)];
-        rxs[INDEX3D_RXS(1,iteration,rx)] = Ey[INDEX3D_FIELDS(i,j,k)];
+        // Average Ex, Ey to match Ez position (staggered grid correction)
+        // Ez[i,j,k] is at (i, j, k+0.5)
+        // Ex[i,j,k] is at (i+0.5, j, k), interpolate to (i, j, k+0.5)
+        rxs[INDEX3D_RXS(0,iteration,rx)] = 0.25 * (Ex[INDEX3D_FIELDS(i,j,k)] + Ex[INDEX3D_FIELDS(i-1,j,k)] + Ex[INDEX3D_FIELDS(i,j,k+1)] + Ex[INDEX3D_FIELDS(i-1,j,k+1)]);
+        // Ey[i,j,k] is at (i, j+0.5, k), interpolate to (i, j, k+0.5)
+        rxs[INDEX3D_RXS(1,iteration,rx)] = 0.25 * (Ey[INDEX3D_FIELDS(i,j,k)] + Ey[INDEX3D_FIELDS(i,j-1,k)] + Ey[INDEX3D_FIELDS(i,j,k+1)] + Ey[INDEX3D_FIELDS(i,j-1,k+1)]);
         rxs[INDEX3D_RXS(2,iteration,rx)] = Ez[INDEX3D_FIELDS(i,j,k)];
-        rxs[INDEX3D_RXS(3,iteration,rx)] = Hx[INDEX3D_FIELDS(i,j,k)];
-        rxs[INDEX3D_RXS(4,iteration,rx)] = Hy[INDEX3D_FIELDS(i,j,k)];
-        rxs[INDEX3D_RXS(5,iteration,rx)] = Hz[INDEX3D_FIELDS(i,j,k)];
+        // Hx[i,j,k] at (i, j+0.5, k+0.5), interpolate to (i, j, k+0.5)
+        rxs[INDEX3D_RXS(3,iteration,rx)] = 0.5 * (Hx[INDEX3D_FIELDS(i,j,k)] + Hx[INDEX3D_FIELDS(i,j-1,k)]);
+        // Hy[i,j,k] at (i+0.5, j, k+0.5), interpolate to (i, j, k+0.5)
+        rxs[INDEX3D_RXS(4,iteration,rx)] = 0.5 * (Hy[INDEX3D_FIELDS(i,j,k)] + Hy[INDEX3D_FIELDS(i-1,j,k)]);
+        // Hz[i,j,k] at (i+0.5, j+0.5, k), interpolate to (i, j, k+0.5)
+        rxs[INDEX3D_RXS(5,iteration,rx)] = 0.125 * (Hz[INDEX3D_FIELDS(i,j,k)] + Hz[INDEX3D_FIELDS(i-1,j,k)] + Hz[INDEX3D_FIELDS(i,j-1,k)] + Hz[INDEX3D_FIELDS(i-1,j-1,k)] + Hz[INDEX3D_FIELDS(i,j,k+1)] + Hz[INDEX3D_FIELDS(i-1,j,k+1)] + Hz[INDEX3D_FIELDS(i,j-1,k+1)] + Hz[INDEX3D_FIELDS(i-1,j-1,k+1)]);
     }
 }
 
-""")
+"""
+)
 
 
 def write_hdf5_outputfile(outputfile, G):
@@ -135,46 +171,52 @@ def write_hdf5_outputfile(outputfile, G):
         G (class): Grid class instance - holds essential parameters describing the model.
     """
 
-    f = h5py.File(outputfile, 'w')
-    f.attrs['gprMax'] = __version__
-    f.attrs['Title'] = G.title
-    f.attrs['Iterations'] = G.iterations
-    f.attrs['nx_ny_nz'] = (G.nx, G.ny, G.nz)
-    f.attrs['dx_dy_dz'] = (G.dx, G.dy, G.dz)
-    f.attrs['dt'] = G.dt
-    nsrc = len(G.voltagesources + G.hertziandipoles + G.magneticdipoles + G.transmissionlines)
-    f.attrs['nsrc'] = nsrc
-    f.attrs['nrx'] = len(G.rxs)
-    f.attrs['srcsteps'] = G.srcsteps
-    f.attrs['rxsteps'] = G.rxsteps
+    f = h5py.File(outputfile, "w")
+    f.attrs["gprMax"] = __version__
+    f.attrs["Title"] = G.title
+    f.attrs["Iterations"] = G.iterations
+    f.attrs["nx_ny_nz"] = (G.nx, G.ny, G.nz)
+    f.attrs["dx_dy_dz"] = (G.dx, G.dy, G.dz)
+    f.attrs["dt"] = G.dt
+    nsrc = len(
+        G.voltagesources + G.hertziandipoles + G.magneticdipoles + G.transmissionlines
+    )
+    f.attrs["nsrc"] = nsrc
+    f.attrs["nrx"] = len(G.rxs)
+    f.attrs["srcsteps"] = G.srcsteps
+    f.attrs["rxsteps"] = G.rxsteps
 
     # Create group for sources (except transmission lines); add type and positional data attributes
     srclist = G.voltagesources + G.hertziandipoles + G.magneticdipoles
     for srcindex, src in enumerate(srclist):
-        grp = f.create_group('/srcs/src' + str(srcindex + 1))
-        grp.attrs['Type'] = type(src).__name__
-        grp.attrs['Position'] = (src.xcoord * G.dx, src.ycoord * G.dy, src.zcoord * G.dz)
+        grp = f.create_group("/srcs/src" + str(srcindex + 1))
+        grp.attrs["Type"] = type(src).__name__
+        grp.attrs["Position"] = (
+            src.xcoord * G.dx,
+            src.ycoord * G.dy,
+            src.zcoord * G.dz,
+        )
 
     # Create group for transmission lines; add positional data, line resistance and
     # line discretisation attributes; write arrays for line voltages and currents
     for tlindex, tl in enumerate(G.transmissionlines):
-        grp = f.create_group('/tls/tl' + str(tlindex + 1))
-        grp.attrs['Position'] = (tl.xcoord * G.dx, tl.ycoord * G.dy, tl.zcoord * G.dz)
-        grp.attrs['Resistance'] = tl.resistance
-        grp.attrs['dl'] = tl.dl
+        grp = f.create_group("/tls/tl" + str(tlindex + 1))
+        grp.attrs["Position"] = (tl.xcoord * G.dx, tl.ycoord * G.dy, tl.zcoord * G.dz)
+        grp.attrs["Resistance"] = tl.resistance
+        grp.attrs["dl"] = tl.dl
         # Save incident voltage and current
-        grp['Vinc'] = tl.Vinc
-        grp['Iinc'] = tl.Iinc
+        grp["Vinc"] = tl.Vinc
+        grp["Iinc"] = tl.Iinc
         # Save total voltage and current
-        f['/tls/tl' + str(tlindex + 1) + '/Vtotal'] = tl.Vtotal
-        f['/tls/tl' + str(tlindex + 1) + '/Itotal'] = tl.Itotal
+        f["/tls/tl" + str(tlindex + 1) + "/Vtotal"] = tl.Vtotal
+        f["/tls/tl" + str(tlindex + 1) + "/Itotal"] = tl.Itotal
 
     # Create group, add positional data and write field component arrays for receivers
     for rxindex, rx in enumerate(G.rxs):
-        grp = f.create_group('/rxs/rx' + str(rxindex + 1))
+        grp = f.create_group("/rxs/rx" + str(rxindex + 1))
         if rx.ID:
-            grp.attrs['Name'] = rx.ID
-        grp.attrs['Position'] = (rx.xcoord * G.dx, rx.ycoord * G.dy, rx.zcoord * G.dz)
+            grp.attrs["Name"] = rx.ID
+        grp.attrs["Position"] = (rx.xcoord * G.dx, rx.ycoord * G.dy, rx.zcoord * G.dz)
 
         for output in rx.outputs:
-            f['/rxs/rx' + str(rxindex + 1) + '/' + output] = rx.outputs[output]
+            f["/rxs/rx" + str(rxindex + 1) + "/" + output] = rx.outputs[output]
