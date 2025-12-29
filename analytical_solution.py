@@ -1,15 +1,14 @@
-import os
 import numpy as np
-from tests.analytical_solutions import hertzian_dipole_fs
 import math
 
 
 # 出力先ディレクトリとファイル名
-output_csv = "ana.csv"
+output_csv = "ana_filtered.csv"
+output_csv_unfiltered = "ana.csv"
 duration = 9.0e-9  # 時間ウィンドウ（秒）
 domain_size = 3.0  # 計算領域のサイズ（メートル）
 domain_num = 360  # グリッド数
-rx = (0.8, 0.8, 0.8)  # 受信点の相対座標（x->y,y->z,z->x）
+rx = (0.2, 0.2, 0.2)  # 受信点の相対座標（x->y,y->z,z->x）
 
 # 物理定数（C++と同じ値）
 epsilon_0 = 8.8541878128e-12  # 真空の誘電率 [F/m]
@@ -25,6 +24,11 @@ c = 1.0 / np.sqrt(permittivity * permeability)
 dt = domain_size / (domain_num * c * np.sqrt(3))  # 時間刻み（秒）
 iterations = math.floor(duration / dt) + 1  # イテレーション数
 dl = 0.001  # 導線長さ（メートル）
+
+# フィルタ設定
+OVERSAMPLE_FACTOR = 10  # オーバーサンプリング倍率
+F_CUT = 2.0e9  # カットオフ周波数 [Hz]
+FILTER_ORDER = 4  # バターワースフィルタの次数
 
 
 class AnalyticalSolution:
@@ -42,22 +46,22 @@ class AnalyticalSolution:
         self.freq = 1e9  # Central frequency
         self.chi = 1 / self.freq
         self.zeta = 2 * np.pi**2 * self.freq**2
-        self.delay = 0
+        self.delay = -self.chi * 3.0
         self.dl = dl  # Length of the dipole
 
     def gaussian(self, time):
         """Calculates Gaussian waveform value at a specific time."""
-        delay = time - self.chi
+        delay = time + self.delay
         return np.exp(-self.zeta * delay**2)
 
     def gaussianprime(self, time):
         """Calculates first derivative of Gaussian waveform at a specific time."""
-        delay = time - self.chi
+        delay = time + self.delay
         return -2 * self.zeta * delay * np.exp(-self.zeta * delay**2)
 
     def gaussiandoubleprime(self, time):
         """Calculates second derivative of Gaussian waveform at a specific time."""
-        delay = time - self.chi
+        delay = time + self.delay
         return (
             2
             * self.zeta
@@ -132,14 +136,36 @@ class AnalyticalSolution:
         return fields
 
 
-my_solution = AnalyticalSolution(rx[0], rx[1], rx[2], dl)
-fields = my_solution.get_fields_time_series(iterations, dt)
+def apply_butterworth_filter(data, dt, f_cut, order=4):
+    """バターワースローパスフィルタを適用（周波数領域）"""
+    N = len(data)
+    freq = np.fft.fftfreq(N, dt)
 
-# time, Ex, Ey, Ez だけ抽出
-time = fields[:, 0]
-Ex = fields[:, 1]
-Ey = fields[:, 2]
-Ez = fields[:, 3]
+    # バターワースの振幅応答
+    H = 1.0 / np.sqrt(1.0 + (np.abs(freq) / f_cut) ** (2 * order))
+
+    Y = np.fft.fft(data)
+    Y_filtered = Y * H
+    return np.real(np.fft.ifft(Y_filtered))
+
+
+# 解析解を生成（オーバーサンプリング）
+dt_fine = dt / OVERSAMPLE_FACTOR
+iterations_fine = iterations * OVERSAMPLE_FACTOR
+
+my_solution = AnalyticalSolution(rx[0], rx[1], rx[2], dl)
+fields_fine = my_solution.get_fields_time_series(iterations_fine, dt_fine)
+
+# フィルタ適用
+Ex_filtered = apply_butterworth_filter(fields_fine[:, 1], dt_fine, F_CUT, FILTER_ORDER)
+Ey_filtered = apply_butterworth_filter(fields_fine[:, 2], dt_fine, F_CUT, FILTER_ORDER)
+Ez_filtered = apply_butterworth_filter(fields_fine[:, 3], dt_fine, F_CUT, FILTER_ORDER)
+
+# ダウンサンプリング
+time = fields_fine[::OVERSAMPLE_FACTOR, 0][:iterations]
+Ex = Ex_filtered[::OVERSAMPLE_FACTOR][:iterations]
+Ey = Ey_filtered[::OVERSAMPLE_FACTOR][:iterations]
+Ez = Ez_filtered[::OVERSAMPLE_FACTOR][:iterations]
 
 # CSVとして保存
 header = "time,Ex,Ey,Ez"
@@ -147,3 +173,19 @@ data_to_save = np.column_stack((time, Ex, Ey, Ez))
 np.savetxt(output_csv, data_to_save, delimiter=",", header=header, comments="")
 
 print(f"解析解を {output_csv} に保存しました。")
+
+# フィルタなしバージョンも保存
+fields_unfiltered = my_solution.get_fields_time_series(iterations, dt)
+data_unfiltered = np.column_stack(
+    (
+        fields_unfiltered[:, 0],
+        fields_unfiltered[:, 1],
+        fields_unfiltered[:, 2],
+        fields_unfiltered[:, 3],
+    )
+)
+np.savetxt(
+    output_csv_unfiltered, data_unfiltered, delimiter=",", header=header, comments=""
+)
+
+print(f"フィルタなし解析解を {output_csv_unfiltered} に保存しました。")
