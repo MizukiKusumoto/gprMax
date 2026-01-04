@@ -7,7 +7,7 @@ output_csv = "ana_filtered.csv"
 output_csv_unfiltered = "ana.csv"
 duration = 9.0e-9  # 時間ウィンドウ（秒）
 domain_size = 3.0  # 計算領域のサイズ（メートル）
-domain_num = 360  # グリッド数
+domain_num = 300  # グリッド数
 rx = (0.2, 0.2, 0.2)  # 受信点の相対座標（x->y,y->z,z->x）
 
 # 物理定数（C++と同じ値）
@@ -46,8 +46,11 @@ class AnalyticalSolution:
         self.freq = 1e9  # Central frequency
         self.chi = 1 / self.freq
         self.zeta = 2 * np.pi**2 * self.freq**2
-        self.delay = -self.chi * 3.0
+        self.delay = -self.chi * 1.0
         self.dl = dl  # Length of the dipole
+        self.f = self.gaussian
+        self.fprime = self.gaussianprime
+        self.fdoubleprime = self.gaussiandoubleprime
 
     def gaussian(self, time):
         """Calculates Gaussian waveform value at a specific time."""
@@ -69,22 +72,42 @@ class AnalyticalSolution:
             * np.exp(-self.zeta * delay**2)
         )
 
+    def gaussiantripleprime(self, time):
+        """Calculates third derivative of Gaussian waveform at a specific time."""
+        delay = time + self.delay
+        return (
+            -4
+            * self.zeta**2
+            * delay
+            * (2 * self.zeta * delay**2 - 3)
+            * np.exp(-self.zeta * delay**2)
+        )
+
+    def set_func(self):
+        """Sets the function f(t) used in field calculations."""
+        self.f = self.gaussianprime
+        self.fprime = self.gaussiandoubleprime
+        self.fdoubleprime = self.gaussiantripleprime
+        # self.chi = 2**0.5 / self.freq
+        # self.zeta = np.pi**2 * self.freq**2
+        # self.delay = -self.chi * 1.0
+
     def Ex(self, time):
         """Calculates Ex component of the electric field at a specific time."""
         t = time - self.tau
         return (self.x * self.z / (4 * np.pi * self.epsilon * self.r**5)) * (
-            3 * self.gaussian(t)
-            + 3 * self.tau * self.gaussianprime(t)
-            + self.tau**2 * self.gaussiandoubleprime(t)
+            3 * self.f(t)
+            + 3 * self.tau * self.fprime(t)
+            + self.tau**2 * self.fdoubleprime(t)
         )
 
     def Ey(self, time):
         """Calculates Ey component of the electric field at a specific time."""
         t = time - self.tau
         return (self.y * self.z / (4 * np.pi * self.epsilon * self.r**5)) * (
-            3 * self.gaussian(t)
-            + 3 * self.tau * self.gaussianprime(t)
-            + self.tau**2 * self.gaussiandoubleprime(t)
+            3 * self.f(t)
+            + 3 * self.tau * self.fprime(t)
+            + self.tau**2 * self.fdoubleprime(t)
         )
 
     def Ez(self, time):
@@ -92,22 +115,22 @@ class AnalyticalSolution:
         t = time - self.tau
         return (1 / (4 * np.pi * self.epsilon * self.r**5)) * (
             (2 * self.z**2 - (self.x**2 + self.y**2))
-            * (self.gaussian(t) + self.tau * self.gaussianprime(t))
-            - (self.x**2 + self.y**2) * self.tau**2 * self.gaussiandoubleprime(t)
+            * (self.f(t) + self.tau * self.fprime(t))
+            - (self.x**2 + self.y**2) * self.tau**2 * self.fdoubleprime(t)
         )
 
     def Hx(self, time):
         """Calculates Hx component of the magnetic field at a specific time."""
         t = time - self.tau
         return -(self.y / (4 * np.pi * self.r**3)) * (
-            self.gaussianprime(t) + self.tau * self.gaussiandoubleprime(t)
+            self.fprime(t) + self.tau * self.fdoubleprime(t)
         )
 
     def Hy(self, time):
         """Calculates Hy component of the magnetic field at a specific time."""
         t = time - self.tau
         return (self.x / (4 * np.pi * self.r**3)) * (
-            self.gaussianprime(t) + self.tau * self.gaussiandoubleprime(t)
+            self.fprime(t) + self.tau * self.fdoubleprime(t)
         )
 
     def Hz(self, time):
@@ -154,6 +177,7 @@ dt_fine = dt / OVERSAMPLE_FACTOR
 iterations_fine = iterations * OVERSAMPLE_FACTOR
 
 my_solution = AnalyticalSolution(rx[0], rx[1], rx[2], dl)
+# my_solution.set_func()
 fields_fine = my_solution.get_fields_time_series(iterations_fine, dt_fine)
 
 # フィルタ適用
